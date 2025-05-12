@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apache Solr: Comprehensive Guide</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <header>
+        <h1>Apache Solr: Comprehensive Guide</h1>
+    </header>
+
+    <main>
+        <section id="comparison-with-databases">
+            <h2>Comparison with Traditional Databases</h2>
+            <p>Apache Solr is a search platform optimized for full-text search and analytics, whereas traditional
+                relational databases (RDBMS) are designed for structured data storage and transactional operations.
+                Here’s a deeper comparison:</p>
+            <h3>Strengths of Solr</h3>
+            <ul>
+                <li><strong>Advanced Search Features:</strong> Solr supports stemming, synonyms, faceting, and
+                    geospatial search, which are not natively available in RDBMS.</li>
+                <li><strong>Horizontal Scalability:</strong> Solr can scale out by adding more nodes to the cluster,
+                    distributing data across shards and replicas.</li>
+                <li><strong>Real-time Indexing:</strong> Solr can index data in near real-time, making it suitable for
+                    applications requiring up-to-date search results.</li>
+            </ul>
+            <h3>Weaknesses of Solr</h3>
+            <ul>
+                <li><strong>Limited Transactional Support:</strong> Solr does not support ACID transactions, making it
+                    unsuitable for applications requiring strict consistency.</li>
+                <li><strong>Complex Configuration:</strong> Setting up and optimizing Solr requires a deep understanding
+                    of its architecture and features.</li>
+            </ul>
+            <h3>Scenarios</h3>
+            <p>For example, an e-commerce platform with millions of products can use Solr for search and filtering,
+                while an RDBMS like MySQL can handle order processing and inventory management.</p>
+        </section>
+
+        <section id="use-cases">
+            <h2>Use Cases</h2>
+            <h3>E-commerce Search</h3>
+            <p>Solr enables features like autocomplete, faceted navigation, and personalized search. Example
+                configuration for faceted search:</p>
+            <pre><code>{
+  "query": "laptop",
+  "facet": {
+    "field": "brand",
+    "limit": 10
+  }
+}</code></pre>
+
+            <h3>Log Analytics</h3>
+            <p>Solr can index and analyze logs for error detection and trend analysis. Example query to find errors in
+                the last 24 hours:</p>
+            <pre><code>{
+  "query": "ERROR",
+  "filter": "timestamp:[NOW-1DAY TO NOW]",
+  "facet": {
+    "field": "log_level"
+  }
+}</code></pre>
+
+            <h3>Document Indexing</h3>
+            <p>Solr is used to index and search large document repositories. Example of indexing a document:</p>
+            <pre><code>{
+  "add": {
+    "doc": {
+      "id": "123",
+      "title": "Solr Deep Dive",
+      "content": "Detailed guide to Apache Solr."
+    }
+  }
+}</code></pre>
+        </section>
+
+        <section id="architecture">
+            <h2>Architecture</h2>
+            <p>Solr’s architecture is designed for distributed search and fault tolerance. Key components include:</p>
+            <ul>
+                <li><strong>Cores:</strong> Independent instances within a Solr server, each with its own configuration
+                    and index.</li>
+                <li><strong>Collections:</strong> Logical groups of cores that represent a single index in a distributed
+                    setup.</li>
+                <li><strong>Shards:</strong> Subdivisions of a collection, enabling parallel processing of queries.</li>
+                <li><strong>Replicas:</strong> Copies of shards for redundancy and load balancing.</li>
+                <li><strong>ZooKeeper:</strong> Manages cluster state, configuration, and leader election.</li>
+            </ul>
+            <p>Example of a distributed setup:</p>
+            <pre><code>Collection: products
+Shards: shard1, shard2
+Replicas: shard1_replica1, shard1_replica2, shard2_replica1</code></pre>
+        </section>
+
+        <section id="technical-aspects">
+            <h2>Technical Aspects</h2>
+            <h3>Indexing</h3>
+            <p>Solr indexes data for fast retrieval. Example of adding a document:</p>
+            <pre><code>curl -X POST -H "Content-Type: application/json" \
+  --data '{"add": {"doc": {"id": "1", "title": "Solr Indexing"}}}' \
+  http://localhost:8983/solr/collection1/update</code></pre>
+
+            <h3>Querying</h3>
+            <p>Solr supports complex queries with filters, facets, and sorting. Example query:</p>
+            <pre><code>http://localhost:8983/solr/collection1/select?q=search+term&fq=category:Books&sort=price+asc</code></pre>
+
+            <h3>Schema Design</h3>
+            <p>Define fields and types in schema.xml. Example:</p>
+            <pre><code>&lt;field name="title" type="text_general" indexed="true" stored="true"/&gt;
+&lt;field name="price" type="float" indexed="true" stored="true"/&gt;</code></pre>
+
+            <h3>Analyzers and Tokenizers</h3>
+            <p>Customize text processing with analyzers. Example:</p>
+            <pre><code>&lt;analyzer&gt;
+  &lt;tokenizer class="solr.StandardTokenizerFactory"/&gt;
+  &lt;filter class="solr.LowerCaseFilterFactory"/&gt;
+  &lt;filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt"/&gt;
+&lt;/analyzer&gt;</code></pre>
+        </section>
+
+        <section id="implementation">
+            <h2>Implementation</h2>
+            <p>Solr is a robust search platform built on Apache Lucene, designed to handle large-scale search and
+                analytics. Below is a deeper dive into its implementation details:</p>
+
+            <h3>1. Apache Lucene Integration</h3>
+            <p>Lucene is the core library that powers Solr's indexing and search capabilities. It uses an inverted index
+                structure, which maps terms to document IDs for efficient retrieval. This structure is optimized for
+                full-text search.</p>
+            <pre><code>// Example of Lucene's inverted index:
+Term: "search" -> DocIDs: [1, 3, 5]
+Term: "solr" -> DocIDs: [2, 4, 6]</code></pre>
+            <p>Lucene also provides advanced features like term frequency-inverse document frequency (TF-IDF) and BM25
+                for relevance scoring.</p>
+
+            <h3>2. Data Storage</h3>
+            <p>Solr stores data in Lucene's index files, which are optimized for read-heavy operations. These files
+                include:</p>
+            <ul>
+                <li><strong>.fdt:</strong> Stores field data for documents.</li>
+                <li><strong>.fdx:</strong> Maps document IDs to field data.</li>
+                <li><strong>.tim:</strong> Contains the term dictionary and metadata.</li>
+                <li><strong>.doc:</strong> Stores document frequency and term positions.</li>
+            </ul>
+            <p>Periodic index merges are performed to optimize storage and improve query performance.</p>
+
+            <h3>3. Distributed Search</h3>
+            <p>Solr supports distributed search by splitting data into shards. Each shard is a Lucene index, and queries
+                are distributed across shards. The results are merged and ranked before being returned to the client.
+            </p>
+            <pre><code>// Example of distributed query flow:
+Client -> Query Coordinator -> Shard 1, Shard 2, Shard 3 -> Merge Results -> Client</code></pre>
+            <p>Shards can have replicas for fault tolerance and load balancing. Replicas can be configured as:</p>
+            <ul>
+                <li><strong>Leader:</strong> Handles indexing requests and coordinates updates.</li>
+                <li><strong>Follower:</strong> Serves read requests and synchronizes with the leader.</li>
+            </ul>
+
+            <h3>4. ZooKeeper Integration</h3>
+            <p>ZooKeeper is a critical component in Solr's distributed architecture. It manages:</p>
+            <ul>
+                <li><strong>Cluster State:</strong> Tracks the status of nodes, shards, and replicas.</li>
+                <li><strong>Configuration Files:</strong> Stores and synchronizes solrconfig.xml and schema.xml across
+                    nodes.</li>
+                <li><strong>Leader Election:</strong> Ensures high availability by electing leaders for shards.</li>
+            </ul>
+            <pre><code>// Example ZooKeeper structure:
+/solr
+  /live_nodes
+  /collections
+    /collection1
+      /shards
+        /shard1
+          /replica1
+          /replica2</code></pre>
+
+            <h3>5. Request Handling</h3>
+            <p>Solr processes requests through a modular architecture of request handlers. Common handlers include:</p>
+            <ul>
+                <li><strong>UpdateRequestHandler:</strong> Handles indexing requests.</li>
+                <li><strong>SearchHandler:</strong> Handles query requests.</li>
+                <li><strong>RealTimeGetHandler:</strong> Fetches documents by ID in real-time.</li>
+            </ul>
+            <pre><code>// Example of a query request:
+http://localhost:8983/solr/collection1/select?q=solr&wt=json</code></pre>
+
+            <h3>6. Plugin Architecture</h3>
+            <p>Solr's plugin architecture allows developers to extend its functionality. Plugins can be used for:</p>
+            <ul>
+                <li><strong>Custom Analyzers:</strong> Define how text is tokenized and processed.</li>
+                <li><strong>Query Parsers:</strong> Customize how queries are interpreted.</li>
+                <li><strong>Response Writers:</strong> Format query responses in custom formats.</li>
+            </ul>
+            <pre><code>// Example of a custom plugin:
+&lt;plugin name="CustomAnalyzer" class="com.example.solr.CustomAnalyzerFactory"/&gt;</code></pre>
+
+            <h3>7. Caching Mechanisms</h3>
+            <p>Solr uses caching to improve query performance. Common caches include:</p>
+            <ul>
+                <li><strong>Query Result Cache:</strong> Stores results of frequently executed queries.</li>
+                <li><strong>Filter Cache:</strong> Caches filter queries for reuse.</li>
+                <li><strong>Document Cache:</strong> Caches document data for faster retrieval.</li>
+            </ul>
+            <pre><code>// Example of cache configuration in solrconfig.xml:
+&lt;queryResultCache class="solr.LRUCache" size="512" initialSize="128"/&gt;</code></pre>
+
+            <h3>8. Scalability and Fault Tolerance</h3>
+            <p>Solr achieves scalability through sharding and replication. Fault tolerance is ensured by:</p>
+            <ul>
+                <li><strong>Replica Redundancy:</strong> Multiple replicas ensure data availability.</li>
+                <li><strong>Automatic Failover:</strong> ZooKeeper detects node failures and reroutes requests.</li>
+            </ul>
+        </section>
+
+        <section id="usage">
+            <h2>Usage</h2>
+            <h3>Installation</h3>
+            <p>Download and extract Solr:</p>
+            <pre><code>curl -O https://downloads.apache.org/lucene/solr/solr-8.11.2.tgz
+tar -xzf solr-8.11.2.tgz
+cd solr-8.11.2
+bin/solr start</code></pre>
+
+            <h3>Configuration</h3>
+            <p>Edit solrconfig.xml and schema.xml to define your setup. Example schema.xml:</p>
+            <pre><code>&lt;schema name="example" version="1.6"&gt;
+  &lt;field name="id" type="string" indexed="true" stored="true" required="true"/&gt;
+  &lt;field name="title" type="text_general" indexed="true" stored="true"/&gt;
+&lt;/schema&gt;</code></pre>
+
+            <h3>Sample Query</h3>
+            <p>Run a query:</p>
+            <pre><code>http://localhost:8983/solr/collection1/select?q=search+term&rows=10</code></pre>
+
+            <h3>Integration</h3>
+            <p>Integrate Solr with applications using REST APIs or client libraries. Example using Python:</p>
+            <pre><code>from pysolr import Solr
+
+solr = Solr('http://localhost:8983/solr/collection1')
+results = solr.search('search term')
+for result in results:
+    print(result['title'])</code></pre>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Apache Solr Guide</p>
+    </footer>
+</body>
+
+</html>
