@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memcached</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <h1>Memcached</h1>
+    <p>Memcached is a high-performance, distributed in-memory caching system primarily used to speed up dynamic web
+        applications by reducing database load. It stores key-value pairs in memory for quick retrieval. Written in C,
+        Memcached is simple yet powerful, offering low-latency, scalable caching with minimal configuration.</p>
+
+    <hr>
+
+    <h2>Table of Contents</h2>
+    <ol>
+        <li><a href="#introduction">Introduction</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#key-concepts">Key Concepts</a>
+            <ul>
+                <li><a href="#slab-allocator">Slab Allocator</a></li>
+                <li><a href="#hash-table-and-consistent-hashing">Hash Table and Consistent Hashing</a></li>
+                <li><a href="#eviction-policies">Eviction Policies</a></li>
+            </ul>
+        </li>
+        <li><a href="#data-flow--protocol">Data Flow & Protocol</a>
+            <ul>
+                <li><a href="#binary-vs-ascii-protocol">Binary vs. ASCII Protocol</a></li>
+                <li><a href="#command-lifecycle">Command Lifecycle</a></li>
+            </ul>
+        </li>
+        <li><a href="#server-implementation-details">Server Implementation Details</a>
+            <ul>
+                <li><a href="#event-driven-io-libevent">Event-Driven I/O (libevent)</a></li>
+                <li><a href="#memory-management">Memory Management</a></li>
+                <li><a href="#concurrency-model">Concurrency Model</a></li>
+            </ul>
+        </li>
+        <li><a href="#deployment--scaling">Deployment & Scaling</a></li>
+        <li><a href="#use-cases--best-practices">Use Cases & Best Practices</a></li>
+        <li><a href="#monitoring--metrics">Monitoring & Metrics</a></li>
+        <li><a href="#extending-and-integrating">Extending and Integrating</a></li>
+        <li><a href="#conclusion">Conclusion</a></li>
+    </ol>
+
+    <hr>
+
+    <h2 id="introduction">Introduction</h2>
+    <p>Memcached acts as an in-memory datastore that sits between an application and its primary data store (e.g.,
+        relational database). By caching expensive database query results, session data, or computed values, it
+        drastically reduces response times and backend load. It is often deployed across multiple nodes, forming a
+        distributed hash table for horizontal scalability.</p>
+
+    <p>Key features:</p>
+    <ul>
+        <li><strong>In-memory storage:</strong> Sub-millisecond access.</li>
+        <li><strong>Distributed architecture:</strong> Data sharding via consistent hashing.</li>
+        <li><strong>Simple protocol:</strong> Text-based (ASCII) or efficient binary.</li>
+        <li><strong>Lightweight:</strong> Minimal dependencies (libevent only).</li>
+        <li><strong>Eviction:</strong> LRU-based removal when memory is constrained.</li>
+    </ul>
+
+    <h2 id="architecture">Architecture</h2>
+    <p>Memcached nodes collaborate without a central coordinator. Clients maintain the consistent-hash ring, choosing
+        which server stores or retrieves a key. Servers are stateless regarding cluster membership.</p>
+
+    <p>Client-side hashing steps:</p>
+    <ol>
+        <li>Compute hash of key.</li>
+        <li>Map hash to a server node in the ring.</li>
+        <li>Send <code>GET</code>, <code>SET</code> or other commands to that node.</li>
+    </ol>
+
+    <p>This design avoids single points of failure and simplifies server logic.</p>
+
+    <h2 id="key-concepts">Key Concepts</h2>
+
+    <h3 id="slab-allocator">Slab Allocator</h3>
+    <p>To avoid heap fragmentation, Memcached uses a slab allocator:</p>
+    <ol>
+        <li><strong>Chunks:</strong> Fixed-size blocks of memory.</li>
+        <li><strong>Slab classes:</strong> Each class handles objects of a specific size range (e.g., 64B, 128B, … up to
+            the max).</li>
+        <li><strong>Pre-allocation:</strong> Each slab class pre-allocates contiguous pages (1MB by default) split into
+            equal chunks.</li>
+    </ol>
+
+    <p>When an object is stored:</p>
+    <ul>
+        <li>Memcached picks the smallest slab class that fits the object.</li>
+        <li>Allocates a single chunk for it.</li>
+    </ul>
+
+    <p>Benefits:</p>
+    <ul>
+        <li>Constant-time allocation/deallocation.</li>
+        <li>No external fragmentation.</li>
+    </ul>
+
+    <h3 id="hash-table-and-consistent-hashing">Hash Table and Consistent Hashing</h3>
+    <p>Internally, each server maintains an associative array (hash table) mapping keys to memory chunks. The table uses
+        dynamic resizing and chaining to resolve collisions.</p>
+
+    <p>Clients use consistent hashing to distribute keys:</p>
+    <ul>
+        <li>Keys map onto a circular hash space.</li>
+        <li>Servers are assigned multiple virtual nodes to even out distribution.</li>
+        <li>On node addition/removal, only ~1/N of keys move.</li>
+    </ul>
+
+    <h3 id="eviction-policies">Eviction Policies</h3>
+    <p>When memory is exhausted, Memcached evicts items using a Least Recently Used (LRU) policy within each slab class.
+        Since each slab class is separate, hot object classes do not evict cold ones and vice versa.</p>
+
+    <h2 id="data-flow--protocol">Data Flow & Protocol</h2>
+
+    <h3 id="binary-vs-ascii-protocol">Binary vs. ASCII Protocol</h3>
+    <ul>
+        <li><strong>ASCII Protocol:</strong> Human-readable, line-oriented. Commands like:</li>
+    </ul>
+    <pre><code>set mykey 0 900 12\r\nHello World!\r\n</code></pre>
+    <ul>
+        <li><strong>Binary Protocol:</strong> Compact, fixed-length header, optional extras. Lower overhead, recommended
+            for production.</li>
+    </ul>
+
+    <h3 id="command-lifecycle">Command Lifecycle</h3>
+    <ol>
+        <li><strong>Client</strong> sends command (e.g., <code>get key</code>).</li>
+        <li><strong>Server</strong> parses request into <code>struct request</code>.</li>
+        <li><strong>Lookup/Allocate:</strong> Access hash table, slab allocator.</li>
+        <li><strong>Response:</strong> Serialize value or status, write to socket.</li>
+        <li><strong>Event Loop:</strong> libevent triggers appropriate callbacks.</li>
+    </ol>
+
+    <h2 id="server-implementation-details">Server Implementation Details</h2>
+
+    <h3 id="event-driven-io-libevent">Event-Driven I/O (libevent)</h3>
+    <p>Memcached uses libevent for high-performance, non-blocking I/O:</p>
+    <ul>
+        <li><strong>Event loop:</strong> Monitors sockets for readability/writeability.</li>
+        <li><strong>Callbacks:</strong> Each file descriptor has read/write handlers.</li>
+        <li><strong>Threaded model:</strong> Traditionally single-threaded; newer versions support multi-threading with
+            per-thread caches.</li>
+    </ul>
+
+    <h3 id="memory-management">Memory Management</h3>
+    <ul>
+        <li><strong>Slab pages:</strong> Pre-allocated using <code>malloc</code> or <code>mmap</code>.</li>
+        <li><strong>LRU Maintainer:</strong> Periodically walks LRU lists to reclaim expired or evicted items.</li>
+        <li><strong>Item Structure:</strong> Each object (<code>struct item</code>) embeds metadata (flags, expiration,
+            key length, data length).</li>
+    </ul>
+
+    <h3 id="concurrency-model">Concurrency Model</h3>
+    <ul>
+        <li><strong>Global lock:</strong> Controls access to slab allocator and LRU lists in single-thread build.</li>
+        <li><strong>Shard locks:</strong> In threaded build, memory is partitioned per thread to reduce contention.</li>
+        <li><strong>Atomic stats:</strong> Uses atomic counters for metrics (hits, misses, evictions).</li>
+    </ul>
+
+    <h2 id="deployment--scaling">Deployment & Scaling</h2>
+    <ul>
+        <li><strong>Cluster Clients:</strong> e.g., <code>libmemcached</code>, <code>python-memcached</code>,
+            <code>memcache-js</code>.
+        </li>
+        <li><strong>Auto-discovery:</strong> Some clients support dynamic server list updates.</li>
+        <li><strong>Replication:</strong> Not built-in; handled at application layer.</li>
+        <li><strong>High Availability:</strong> Pair Memcached with proxy solutions (e.g., Twemproxy) or use Sentinel
+            patterns.</li>
+    </ul>
+
+    <h2 id="use-cases--best-practices">Use Cases & Best Practices</h2>
+    <ul>
+        <li><strong>Session Store:</strong> Store user sessions for fast retrieval.</li>
+        <li><strong>Query Result Caching:</strong> Cache DB query results, REST API responses.</li>
+        <li><strong>Object Cache:</strong> Cache rendered HTML fragments or computed data.</li>
+    </ul>
+
+    <p>Best Practices:</p>
+    <ul>
+        <li><strong>Appropriate TTLs:</strong> Set expiration to avoid stale data and memory bloat.</li>
+        <li><strong>Sizing Strategy:</strong> Monitor usage patterns; pre-allocate enough memory.</li>
+        <li><strong>Key Management:</strong> Use namespacing to avoid collisions.</li>
+        <li><strong>Warm-up:</strong> Preload cache on service start.</li>
+    </ul>
+
+    <h2 id="monitoring--metrics">Monitoring & Metrics</h2>
+    <p>Memcached exposes stats via the <code>stats</code> command:</p>
+    <pre><code>stats
+STAT pid 1234
+STAT uptime 3600
+STAT curr_items 1024
+STAT total_items 5000
+STAT get_hits 20000
+STAT get_misses 5000
+...</code></pre>
+    <p>Key metrics:</p>
+    <ul>
+        <li><strong>hit ratio</strong> = hits / (hits + misses)</li>
+        <li><strong>evictions:</strong> indicates memory pressure</li>
+        <li><strong>memory usage:</strong> <code>bytes / limit_maxbytes</code></li>
+    </ul>
+
+    <p>Integrate with Graphite, Prometheus, or other monitoring systems.</p>
+
+    <h2 id="extending-and-integrating">Extending and Integrating</h2>
+    <ul>
+        <li><strong>Custom eviction:</strong> Modify LRU maintainer or implement new policy.</li>
+        <li><strong>Plugins & Modules:</strong> Memcached core is monolithic; contributions go via PRs.</li>
+        <li><strong>Protocol Extensions:</strong> Add new commands by updating <code>protocol_binary_handlers</code> or
+            ASCII parser.</li>
+    </ul>
+
+    <h2 id="conclusion">Conclusion</h2>
+    <p>Memcached remains a cornerstone in high-performance caching, offering simplicity, speed, and scalability.
+        Understanding its internals—slab allocation, LRU, event-driven I/O—empowers developers to tune and extend it for
+        diverse use cases.</p>
+
+    <hr>
+
+    <p><em>Document created on May 11, 2025.</em></p>
+</body>
+
+</html>
